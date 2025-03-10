@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Resume Chat Agent</title>
+</head>
+<body>
+    <h1>Upload Your Resume</h1>
+    <input type="file" id="resumeInput">
+    <button onclick="uploadResume()">Start Chat</button>
+    <button onclick="window.location.href='/visualize_workflow';">View Workflow Visualization</button>
+    <div id="chatBox">
+        <input type="text" id="queryInput">
+        <button onclick="sendQuery()">Ask</button>
+    </div>
+    <div id="chatOutput"></div>
+
+    <script>
+        function uploadResume() {
+            const input = document.getElementById('resumeInput');
+            const data = new FormData();
+            data.append('file', input.files[0]);
+
+            fetch('/upload', { method: 'POST', body: data })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.message === 'File uploaded successfully') {
+                        alert('You can now start chatting with the agent.');
+                    }
+                });
+        }
+
+        function sendQuery() {
+            const query = document.getElementById('queryInput').value;
+            fetch('/chat', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ query })
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('chatOutput').textContent = data.response;
+            });
+        }
+    </script>
+</body>
+</html>
+
+

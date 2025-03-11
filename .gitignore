@@ -3,3 +3,8 @@ __pycache__/
 *.pyc
 venv/
 .DS_Store
+agenticpdf/storage/default__vector_store.json
+agenticpdf/storage/docstore.json
+agenticpdf/storage/graph_store.json
+agenticpdf/storage/image__vector_store.json
+agenticpdf/storage/index_store.json

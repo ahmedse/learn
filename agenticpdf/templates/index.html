@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document Chat</title>
+    <style>
+        /* General Styling */
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 0;
+            background-color: #f8f9fa;
+            color: #333;
+        }
+
+        header {
+            background-color: #007bff;
+            color: #fff;
+            padding: 10px 20px;
+            text-align: center;
+        }
+
+        main {
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 20px;
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            text-align: center;
+            color: #007bff;
+        }
+
+        h3 {
+            margin-top: 0;
+        }
+
+        /* Upload Section */
+        #upload-section {
+            margin-bottom: 20px;
+        }
+
+        #file-upload {
+            display: block;
+            margin-top: 10px;
+        }
+
+        #upload-button {
+            background-color: #007bff;
+            color: #fff;
+            border: none;
+            padding: 10px 15px;
+            cursor: pointer;
+            border-radius: 5px;
+            margin-top: 10px;
+        }
+
+        #upload-button:hover {
+            background-color: #0056b3;
+        }
+
+        #upload-status {
+            margin-top: 10px;
+            font-size: 0.9em;
+        }
+
+        /* Chat Section */
+        #output {
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 10px;
+            height: 300px;
+            overflow-y: auto;
+            background-color: #f9f9f9;
+            margin-bottom: 10px;
+        }
+
+        #output p {
+            margin: 5px 0;
+        }
+
+        .user-message {
+            font-weight: bold;
+            color: #007bff;
+        }
+
+        .bot-message {
+            font-weight: normal;
+            color: #333;
+        }
+
+        #query {
+            width: calc(100% - 110px);
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            margin-right: 10px;
+        }
+
+        #send-button {
+            background-color: #28a745;
+            color: #fff;
+            border: none;
+            padding: 10px 15px;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+
+        #send-button:hover {
+            background-color: #218838;
+        }
+
+        /* Workflow and End Chat Buttons */
+        #buttons {
+            margin-top: 20px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        #buttons button {
+            background-color: #6c757d;
+            color: #fff;
+            border: none;
+            padding: 10px 15px;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+
+        #buttons button:hover {
+            background-color: #5a6268;
+        }
+
+        #visualize-button {
+            background-color: #17a2b8;
+        }
+
+        #visualize-button:hover {
+            background-color: #138496;
+        }
+
+        #end-chat {
+            background-color: #dc3545;
+        }
+
+        #end-chat:hover {
+            background-color: #c82333;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Document Chat</h1>
+    </header>
+    <main>
+        <!-- Upload Document Section -->
+        <section id="upload-section">
+            <h3>Upload Document</h3>
+            <input type="file" id="file-upload" />
+            <button id="upload-button">Upload Document</button>
+            <p id="upload-status"></p>
+        </section>
+
+        <!-- Chat Section -->
+        <section id="chat-section">
+            <h3>Chat with Your Document</h3>
+            <div id="output"></div>
+            <div>
+                <input type="text" id="query" placeholder="Enter your query..." />
+                <button id="send-button">Send</button>
+            </div>
+        </section>
+
+        <!-- Workflow Visualization and End Chat -->
+        <section id="buttons">
+            <button id="visualize-button">View Workflow Visualization</button>
+            <button id="end-chat">End Chat</button>
+        </section>
+    </main>
+
+    <script>
+        // Backend API URLs
+        const uploadUrl = "/upload";
+        const chatUrl = "/chat";
+        const endChatUrl = "/end_chat";
+        const visualizeUrl = "/visualize_workflow";
+
+        // DOM Elements
+        const fileUpload = document.getElementById("file-upload");
+        const uploadButton = document.getElementById("upload-button");
+        const uploadStatus = document.getElementById("upload-status");
+        const queryInput = document.getElementById("query");
+        const sendButton = document.getElementById("send-button");
+        const output = document.getElementById("output");
+        const visualizeButton = document.getElementById("visualize-button");
+        const endChatButton = document.getElementById("end-chat");
+
+        // Upload Document
+        uploadButton.addEventListener("click", async () => {
+            const file = fileUpload.files[0];
+            if (!file) {
+                uploadStatus.textContent = "Please select a file to upload.";
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append("file", file);
+
+            uploadStatus.textContent = "Uploading...";
+            try {
+                const response = await fetch(uploadUrl, {
+                    method: "POST",
+                    body: formData,
+                });
+
+                const data = await response.json();
+                if (response.ok) {
+                    uploadStatus.textContent = data.message;
+                } else {
+                    uploadStatus.textContent = `Error: ${data.error}`;
+                }
+            } catch (error) {
+                uploadStatus.textContent = "Failed to upload document. Please try again.";
+            }
+        });
+
+        // Handle Chat Query
+        sendButton.addEventListener("click", async () => {
+            const query = queryInput.value.trim();
+            if (!query) {
+                output.innerHTML += `<p><span class="user-message">Error:</span> Please enter a query.</p>`;
+                return;
+            }
+
+            try {
+                const response = await fetch(chatUrl, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({ query }),
+                });
+
+                const data = await response.json();
+                if (response.ok) {
+                    output.innerHTML += `<p><span class="user-message">You:</span> ${query}</p>`;
+                    output.innerHTML += `<p><span class="bot-message">Bot:</span> ${data.response}</p>`;
+                } else {
+                    output.innerHTML += `<p><span class="user-message">Error:</span> ${data.error}</p>`;
+                }
+            } catch (error) {
+                output.innerHTML += `<p><span class="user-message">Error:</span> Failed to send query. Please try again.</p>`;
+            }
+
+            queryInput.value = ""; // Clear input field
+        });
+
+        // End Chat
+        endChatButton.addEventListener("click", async () => {
+            try {
+                const response = await fetch(endChatUrl, { method: "POST" });
+                const data = await response.json();
+                if (response.ok) {
+                    output.innerHTML += `<p><span class="bot-message">System:</span> ${data.message}</p>`;
+                } else {
+                    output.innerHTML += `<p><span class="user-message">Error:</span> ${data.error}</p>`;
+                }
+            } catch (error) {
+                output.innerHTML += `<p><span class="user-message">Error:</span> Failed to end chat. Please try again.</p>`;
+            }
+        });
+
+        // View Workflow Visualization
+        visualizeButton.addEventListener("click", () => {
+            window.open(visualizeUrl, "_blank");
+        });
+    </script>
+</body>
+</html>

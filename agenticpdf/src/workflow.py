@@ -2,74 +2,106 @@ import os
 from llama_index.core.workflow import Workflow, StartEvent, StopEvent, Event, step, Context
 from llama_index.llms.openai import OpenAI
 from llama_index.embeddings.openai import OpenAIEmbedding
-from llama_index.core import VectorStoreIndex
+from llama_index.core import VectorStoreIndex, StorageContext, load_index_from_storage
 from llama_parse import LlamaParse
 from llama_index.utils.workflow import draw_all_possible_flows
-from llama_index.core.tools import FunctionTool
-from llama_index.core.agent import FunctionCallingAgent
+
 
 class QueryEvent(Event):
     query: str
 
-class ChatEvent(Event):
-    continue_chat: bool
+class SetupCompleteEvent(Event):
+    """Event emitted when setup is complete."""
+    pass
 
 class RAGWorkflow(Workflow):
     storage_dir = "./storage"
     llm: OpenAI
     query_engine: VectorStoreIndex
-    agent: FunctionCallingAgent
+
+    def create_start_event(self, resume_file: str) -> StartEvent:
+        """Helper method to create a StartEvent."""
+        if not os.path.exists(resume_file):
+            raise ValueError(f"The resume file does not exist: {resume_file}")
+        print(f"WORKFLOW: Creating StartEvent for file {resume_file}")
+        return StartEvent(resume_file=resume_file)
 
     @step
-    async def set_up(self, ctx: Context, ev: StartEvent) -> ChatEvent:
-        if not os.path.exists(ev.resume_file):
-            raise ValueError("No resume file provided")
-        
+    async def start(self, ctx: Context, ev: StartEvent) -> SetupCompleteEvent:
+        """First step: Set up the RAG workflow."""
+        print(f"WORKFLOW: Setting up workflow for file {ev.resume_file}")
+
+        # Initialize LLM
         self.llm = OpenAI(model="gpt-4o-mini", api_key=os.getenv("OPENAI_API_KEY"))
-        documents = LlamaParse(api_key=os.getenv("LLAMA_CLOUD_API_KEY")).load_data(ev.resume_file)
 
-        index = VectorStoreIndex.from_documents(
-            documents,
-            embed_model=OpenAIEmbedding(model_name="text-embedding-3-small", api_key=os.getenv("OPENAI_API_KEY"))
-        )
+        # Check if the index is already stored
+        if os.path.exists(self.storage_dir):
+            print("WORKFLOW: Index found on disk. Loading from storage...")
+            storage_context = StorageContext.from_defaults(persist_dir=self.storage_dir)
+            index = load_index_from_storage(storage_context)
+        else:
+            print("WORKFLOW: Index not found. Parsing and creating a new index...")
+            try:
+                # Parse the resume document
+                documents = LlamaParse(
+                    api_key=os.getenv("LLAMA_CLOUD_API_KEY"),
+                    result_type="markdown",
+                    content_guideline_instruction="This is a resume, gather related facts together and format it as bullet points with headers"
+                ).load_data(ev.resume_file)
+                print(f"WORKFLOW: Parsed {len(documents)} documents.")
+
+                # Create a new vector store index
+                index = VectorStoreIndex.from_documents(
+                    documents,
+                    embed_model=OpenAIEmbedding(model_name="text-embedding-3-small", api_key=os.getenv("OPENAI_API_KEY"))
+                )
+                # Persist the index to disk
+                print("WORKFLOW: Persisting index to disk...")
+                index.storage_context.persist(persist_dir=self.storage_dir)
+            except Exception as e:
+                raise ValueError(f"Failed to parse and index the resume file: {str(e)}")
+
+        # Create a query engine
         self.query_engine = index.as_query_engine(llm=self.llm, similarity_top_k=5)
+        print("WORKFLOW: Query engine created successfully.")
 
-        def query_resume(q: str) -> str:
-            response = self.query_engine.query(q)
-            return response.response
-        
-        resume_tool = FunctionTool.from_defaults(fn=query_resume)
-        self.agent = FunctionCallingAgent.from_tools(tools=[resume_tool], llm=self.llm, verbose=True)
-
-        return ChatEvent(continue_chat=True)
+        # Return the setup completion event
+        return SetupCompleteEvent()
 
     @step
-    async def chat_with_user(self, ctx: Context, ev: ChatEvent) -> StopEvent:
-        if not ev.continue_chat:
-            return StopEvent(result="Chat ended by user.")
+    async def handle_setup_complete(self, ctx: Context, ev: SetupCompleteEvent) -> StopEvent:
+        """Handler for setup complete event - in a real app this would wait for queries."""
+        print("WORKFLOW: Setup complete. Ready to handle queries.")
+        # In a real application, you would wait for queries here
+        # For visualization purposes, we'll just return a stop event
+        return StopEvent(result="Setup complete. The system is ready to answer queries about the resume.")
 
-        # Get user query
-        user_query = ctx.get("user_query", "Could you please ask your question?")
-        response = self.agent.chat(user_query)
-        print(f"Agent Response: {response}")
+    @step  
+    async def handle_query(self, ctx: Context, ev: QueryEvent) -> StopEvent:
+        """Answer a query using the initialized RAG pipeline."""
+        print(f"WORKFLOW: Received query: {ev.query}")
 
-        # Check if user wants to continue the chat
-        continue_chat = ctx.get("continue_chat", True)
-        if not continue_chat:
-            return StopEvent(result="User ended the chat session.")
+        try:
+            # Query the engine
+            response = self.query_engine.query(f"This is a question about the resume: {ev.query}")
+            print(f"WORKFLOW: Query response: {response.response}")
+        except Exception as e:
+            print(f"WORKFLOW: Error during query execution: {str(e)}")
+            raise ValueError(f"Query execution failed: {str(e)}")
 
-        # Add a condition to stop after a certain number of iterations or based on user input
-        max_iterations = ctx.get("max_iterations", 5)
-        current_iteration = ctx.get("current_iteration", 0) + 1
-
-        if current_iteration >= max_iterations:
-            return StopEvent(result="Maximum chat iterations reached.")
-        
-        # Update the context with the new iteration count
-        ctx["current_iteration"] = current_iteration
-        return ChatEvent(continue_chat=continue_chat)
+        # Return the response as a StopEvent
+        return StopEvent(result=response.response)
 
     def visualize(self, filename=""):
-        base_static_path = '/home/ahmed/learn/agentic/apps/static'
+        """Visualize the workflow."""
+        print("WORKFLOW: Visualizing the workflow...")
+        base_static_path = "/home/ahmed/learn/agentic/apps/static"
         full_path = os.path.join(base_static_path, filename)
-        draw_all_possible_flows(self, filename=full_path)
+
+        # Generate the workflow visualization
+        try:
+            draw_all_possible_flows(self, filename=full_path)  # Use the workflow's structure
+            print(f"WORKFLOW: Workflow visualization saved to {full_path}")
+        except Exception as e:
+            print(f"WORKFLOW: Error during visualization: {str(e)}")
+            raise  # Re-raise the exception only if caught

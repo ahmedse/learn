@@ -27,7 +27,7 @@ class RAGWorkflow(Workflow):
         return StartEvent(resume_file=resume_file)
 
     @step
-    async def start(self, ctx: Context, ev: StartEvent) -> SetupCompleteEvent:
+    async def set_up(self, ctx: Context, ev: StartEvent) -> SetupCompleteEvent:
         """First step: Set up the RAG workflow."""
         print(f"WORKFLOW: Setting up workflow for file {ev.resume_file}")
 
@@ -77,7 +77,7 @@ class RAGWorkflow(Workflow):
         return StopEvent(result="Setup complete. The system is ready to answer queries about the resume.")
 
     @step  
-    async def handle_query(self, ctx: Context, ev: QueryEvent) -> StopEvent:
+    async def ask_question(self, ctx: Context, ev: QueryEvent) -> StopEvent:
         """Answer a query using the initialized RAG pipeline."""
         print(f"WORKFLOW: Received query: {ev.query}")
 
